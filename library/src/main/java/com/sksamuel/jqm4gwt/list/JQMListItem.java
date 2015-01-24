@@ -367,10 +367,7 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         if (icon)
             imageElem.setAttribute("class", "ui-li-icon");
         else
-        {
-        	imageElem.addClassName("ui-li-thumb");
-        	getElement().addClassName("ui-li-has-thumb");
-        }
+            imageElem.removeAttribute("class");
         return this;
     }
 
