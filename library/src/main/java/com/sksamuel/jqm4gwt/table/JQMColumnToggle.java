@@ -1,6 +1,7 @@
 package com.sksamuel.jqm4gwt.table;
 
 import java.util.ArrayList;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -8,32 +9,43 @@ import java.util.Map;
 import java.util.Map.Entry;
 import java.util.Set;
 
+import com.google.gwt.core.client.JavaScriptObject;
+import com.google.gwt.core.client.Scheduler;
+import com.google.gwt.core.client.Scheduler.RepeatingCommand;
 import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
+import com.google.gwt.dom.client.ImageElement;
 import com.google.gwt.dom.client.TableCellElement;
 import com.google.gwt.dom.client.TableRowElement;
+import com.google.gwt.event.logical.shared.ValueChangeEvent;
+import com.google.gwt.event.logical.shared.ValueChangeHandler;
+import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.uibinder.client.UiChild;
-import com.google.gwt.user.client.Element;
 import com.google.gwt.user.client.ui.ComplexPanel;
+import com.google.gwt.user.client.ui.HasValue;
 import com.google.gwt.user.client.ui.Widget;
+import com.sksamuel.jqm4gwt.HasFilterable;
 import com.sksamuel.jqm4gwt.JQMCommon;
+import com.sksamuel.jqm4gwt.form.elements.JQMFilterableEvent;
 import com.sksamuel.jqm4gwt.html.CustomFlowPanel;
 
 /**
- * See <a href="http://view.jquerymobile.com/1.3.2/dist/demos/widgets/table-column-toggle/">Table: Column Toggle</a>
- * <p/> See <a href="http://view.jquerymobile.com/1.3.2/dist/demos/widgets/table-reflow/">Table: Reflow</a>
+ * See <a href="http://demos.jquerymobile.com/1.4.5/table-column-toggle/">Table: Column Toggle</a>
+ * <p/> See <a href="http://demos.jquerymobile.com/1.4.5/table-reflow/">Table: Reflow</a>
+ *
  * <p/> See also <a href="http://jquerymobile.com/demos/1.3.0-rc.1/docs/tables/">Responsive tables</a>
  * <p/> See also <a href="http://jquerymobile.com/demos/1.3.0-beta.1/docs/demos/tables/financial-grouped-columns.html">Grouped column headers</a>
- * <p/><b>WARNING!</b> You'd better use fixed jQuery Mobile 1.3.2 from "jqm4gwt\standalone\misc\fixed jquery mobile",
- * because critical "columns stay hidden when shrinking and resizing the browser window"
- * bug is not fixed in official 1.3.2 version.
  *
  * @author slavap
  *
  */
-public class JQMColumnToggle extends CustomFlowPanel {
+public class JQMColumnToggle extends CustomFlowPanel implements HasFilterable,
+        HasValue<Collection<String>> {
 
+    //TODO: table-stroke and table-stripe are deprecated in 1.4, so custom CSS will be needed in 1.5
     public static final String STD_ROW_LINES = "table-stroke";
     public static final String STD_ROW_STRIPES = "table-stripe";
+
     public static final String STD_RESPONSIVE = "ui-responsive";
 
     public static final String JQM4GWT_COL_PERSISTENT = "jqm4gwt-col-persistent";
@@ -45,6 +57,8 @@ public class JQMColumnToggle extends CustomFlowPanel {
 
     private static final String TOGGLE = "columntoggle";
     private static final String REFLOW = "reflow";
+
+    private static final String IMG_ONLY = "img-only";
 
     // See http://stackoverflow.com/a/2709855
     @SuppressWarnings("unused")
@@ -94,8 +108,12 @@ public class JQMColumnToggle extends CustomFlowPanel {
     /** populated directly by addColGroupWidget(), probably from UiBinder template */
     private final Map<Widget, ColumnDef> colGroupWidgets = new LinkedHashMap<Widget, ColumnDef>();
 
-    private List<String> dataStr;
+    private Collection<String> dataStr;
     private Map<Widget, Boolean> dataObj;
+
+    private boolean boundFilterEvents;
+    private boolean boundFilterCallback;
+    private JavaScriptObject origFilter;
 
     public JQMColumnToggle() {
         super(Document.get().createTableElement());
@@ -278,6 +296,18 @@ public class JQMColumnToggle extends CustomFlowPanel {
         setDataStr(lst);
     }
 
+    public Collection<String> getBodyData() {
+        return dataStr;
+    }
+
+    /**
+     * Set and refresh table cells/body. Each string/cell in collection can be valid HTML.
+     */
+    public void setBodyData(Collection<String> data) {
+        this.cells = null;
+        setDataStr(data);
+    }
+
     public void refreshBody() {
         tBody.clear();
         populateBody();
@@ -331,6 +361,7 @@ public class JQMColumnToggle extends CustomFlowPanel {
         if (col == null) return null;
         setColPriority(col, priority);
         col.getElement().setInnerHTML(title);
+        applyImgOnly(col);
         return col;
     }
 
@@ -356,13 +387,6 @@ public class JQMColumnToggle extends CustomFlowPanel {
             }
             return;
         }
-    }
-
-    @Override
-    protected void onLoad() {
-        super.onLoad();
-        loaded = true;
-        if (tBody.getWidgetCount() == 0 && !colTitleWidgets.isEmpty()) populateBody();
     }
 
     private int getNumOfCols() {
@@ -397,6 +421,7 @@ public class JQMColumnToggle extends CustomFlowPanel {
         setColPriority(col, grp.priority);
         col.getElement().setInnerHTML(addTh ? removeTh(grp.title) : grp.title);
         if (grp.colspan > 1) JQMCommon.setAttribute(col, "colspan", String.valueOf(grp.colspan));
+        applyImgOnly(col);
         return col;
     }
 
@@ -416,6 +441,31 @@ public class JQMColumnToggle extends CustomFlowPanel {
         return s.substring("<th>".length(), s.length() - "</th>".length()).trim();
     }
 
+    private static boolean isImgOnly(Element elt) {
+        if (elt == null) return false;
+        String s = elt.getInnerHTML();
+        if (s == null || s.isEmpty()) return false;
+        int p = s.indexOf('<');
+        if (p == -1) return false;
+        int endP = p + 1 + ImageElement.TAG.length();
+        String t = s.substring(p + 1, endP);
+        if (!ImageElement.TAG.equalsIgnoreCase(t)) return false;
+        for (int i = endP; i < s.length(); i++) {
+            if (s.charAt(i) == '>') {
+                p = s.indexOf('<', i + 1);
+                return p == -1;
+            }
+        }
+        return false;
+    }
+
+    private static void applyImgOnly(Widget w) {
+        if (w == null) return;
+        Element elt = w.getElement();
+        if (isImgOnly(elt)) elt.addClassName(IMG_ONLY);
+        else elt.removeClassName(IMG_ONLY);
+    }
+
     private void addToBody(String cell, int index) {
         if (cell == null || index < 0 || getNumOfCols() <= 0) return;
         int row = index / getNumOfCols();
@@ -431,6 +481,7 @@ public class JQMColumnToggle extends CustomFlowPanel {
         } else {
             c.getElement().setInnerHTML(cell);
         }
+        applyImgOnly(c);
     }
 
     private void addToBody(Widget w, int index, boolean addTh) {
@@ -443,6 +494,7 @@ public class JQMColumnToggle extends CustomFlowPanel {
         if (c == null) return;
         c.clear();
         if (w != null) c.add(w);
+        applyImgOnly(c);
     }
 
     private static boolean isTag(String tag, Element elt) {
@@ -550,7 +602,7 @@ public class JQMColumnToggle extends CustomFlowPanel {
         if (r != null) tHead.remove(r);
     }
 
-    private void setDataStr(List<String> lst) {
+    private void setDataStr(Collection<String> lst) {
         dataObj = null;
         dataStr = lst;
         refreshBody();
@@ -564,7 +616,8 @@ public class JQMColumnToggle extends CustomFlowPanel {
     }
 
     /**
-     * @param asTh - &lt;th> will be used for creating cell instead of &lt;td>
+     * @param asTh - &lt;th> will be used for creating cell instead of &lt;td>,
+     * so such cell will be styled differently, like columnNames/header cells.
      */
     @UiChild(tagname = "cell")
     public void addCellWidget(Widget w, Boolean asTh) {
@@ -713,4 +766,185 @@ public class JQMColumnToggle extends CustomFlowPanel {
         if (value) JQMCommon.setAttribute(this, "data-mode", REFLOW);
         else JQMCommon.setAttribute(this, "data-mode", TOGGLE);
     }
+
+    // Filterable support copied from JQMWidget
+
+    private Widget getDataFilterWidget() {
+        return this;
+    }
+
+    /** @return true if this list is set to filterable, false otherwise. */
+    public boolean isFilterable() {
+        return JQMCommon.isFilterable(getDataFilterWidget());
+    }
+
+    public void setFilterable(boolean value) {
+        JQMCommon.setFilterable(getDataFilterWidget(), value);
+        checkFilterEvents();
+    }
+
+    public String getDataFilter() {
+        return JQMCommon.getDataFilter(getDataFilterWidget());
+    }
+
+    /**
+     * @param filterSelector - a jQuery selector that will be used to retrieve the element
+     * that will serve as the input source, UiBinder example: dataFilter="#{fltr1.getFilterId}"
+     */
+    public void setDataFilter(String filterSelector) {
+        JQMCommon.setDataFilter(getDataFilterWidget(), filterSelector);
+        checkFilterEvents();
+    }
+
+    public String getFilterChildren() {
+        return JQMCommon.getFilterChildren(getDataFilterWidget());
+    }
+
+    /**
+     * See <a href="http://api.jquerymobile.com/filterable/#option-children">Filterable Children</a>
+     */
+    public void setFilterChildren(String filterChildren) {
+        JQMCommon.setFilterChildren(getDataFilterWidget(), filterChildren);
+    }
+
+    public boolean isFilterReveal() {
+        return JQMCommon.isFilterReveal(getDataFilterWidget());
+    }
+
+    public void setFilterReveal(boolean value) {
+        JQMCommon.setFilterReveal(getDataFilterWidget(), value);
+    }
+
+    @Override
+    public void refreshFilter() {
+        if (isFilterable()) JQMCommon.refreshFilter(getDataFilterWidget());
+    }
+
+    /** @param filter - currently entered filter text */
+    protected void onBeforeFilter(String filter) {
+    }
+
+    @Override
+    public void doBeforeFilter(String filter) {
+        onBeforeFilter(filter);
+        JQMFilterableEvent.fire(this, JQMFilterableEvent.FilterableState.BEFORE_FILTER, filter);
+    }
+
+    public HandlerRegistration addFilterableHandler(JQMFilterableEvent.Handler handler) {
+        return addHandler(handler, JQMFilterableEvent.getType());
+    }
+
+    private void bindFilterEvents() {
+        if (boundFilterEvents) return;
+        JQMCommon.bindFilterEvents(this, getDataFilterWidget().getElement());
+        boundFilterEvents = true;
+    }
+
+    private void unbindFilterEvents() {
+        if (!boundFilterEvents) return;
+        JQMCommon.unbindFilterEvents(getDataFilterWidget().getElement());
+        boundFilterEvents = false;
+    }
+
+    /**
+     * @param elt - current filtering element
+     * @param index - filtering element's index
+     * @param searchValue - filtering text
+     * @return - must return true if the element is to be filtered,
+     * and it must return false if the element is to be shown.
+     * null - means default filtering should be used.
+     */
+    protected Boolean onFiltering(Element elt, Integer index, String searchValue) {
+        //String s = JQMCommon.getTextForFiltering(elt);
+        return null;
+    }
+
+    @Override
+    public Boolean doFiltering(Element elt, Integer index, String searchValue) {
+        Boolean rslt = onFiltering(elt, index, searchValue);
+        Boolean eventRslt = JQMFilterableEvent.fire(this, JQMFilterableEvent.FilterableState.FILTERING,
+                searchValue, elt, index);
+        // return the worst (from "filter out" to "default filtering") result
+        if (rslt != null && rslt || eventRslt != null && eventRslt) return true;
+        if (rslt != null) return rslt;
+        if (eventRslt != null) return eventRslt;
+        return null;
+    }
+
+    private void bindFilterCallback() {
+        if (boundFilterCallback) return;
+        Element elt = getDataFilterWidget().getElement();
+        origFilter = JQMCommon.getFilterCallback(elt);
+        JQMCommon.bindFilterCallback(this, elt, origFilter);
+        boundFilterCallback = true;
+    }
+
+    private void unbindFilterCallback() {
+        if (!boundFilterCallback) return;
+        JQMCommon.unbindFilterCallback(getDataFilterWidget().getElement(), origFilter);
+        origFilter = null;
+        boundFilterCallback = false;
+    }
+
+    private void checkFilterEvents() {
+        if (isAttached()) {
+            boolean b = isFilterable();
+            if (!b) {
+                unbindFilterEvents();
+                unbindFilterCallback();
+            } else {
+                bindFilterEvents();
+                Scheduler.get().scheduleFinally(new RepeatingCommand() {
+                    @Override
+                    public boolean execute() {
+                        if (!isFilterable()) return false;
+                        Element elt = getDataFilterWidget().getElement();
+                        if (!JQMCommon.isFilterableReady(elt)) return true;
+                        bindFilterCallback();
+                        return false;
+                    }
+                });
+            }
+        }
+    }
+
+    @Override
+    protected void onLoad() {
+        super.onLoad();
+        loaded = true;
+        checkFilterEvents();
+        if (tBody.getWidgetCount() == 0 && !colTitleWidgets.isEmpty()) populateBody();
+    }
+
+    @Override
+    protected void onUnload() {
+        unbindFilterEvents();
+        super.onUnload();
+    }
+
+    @Override
+    public HandlerRegistration addValueChangeHandler(ValueChangeHandler<Collection<String>> handler) {
+        return addHandler(handler, ValueChangeEvent.getType());
+    }
+
+    @Override
+    public Collection<String> getValue() {
+        return getBodyData();
+    }
+
+    @Override
+    public void setValue(Collection<String> value) {
+        setValue(value, false/*fireEvents*/);
+    }
+
+    @Override
+    public void setValue(Collection<String> value, boolean fireEvents) {
+        Collection<String> oldValue = fireEvents ? getValue() : null;
+        setBodyData(value);
+        if (fireEvents) {
+            Collection<String> newValue = getValue();
+            ValueChangeEvent.fireIfNotEqual(this, oldValue, newValue);
+        }
+    }
+
 }

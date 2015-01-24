@@ -7,6 +7,7 @@ import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.EventTarget;
 import com.google.gwt.dom.client.FieldSetElement;
+import com.google.gwt.dom.client.ImageElement;
 import com.google.gwt.dom.client.InputElement;
 import com.google.gwt.dom.client.LIElement;
 import com.google.gwt.dom.client.Node;
@@ -19,19 +20,24 @@ import com.google.gwt.event.shared.GwtEvent.Type;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.uibinder.client.UiConstructor;
 import com.google.gwt.user.client.DOM;
-import com.google.gwt.user.client.ui.FlowPanel;
+import com.google.gwt.user.client.ui.ComplexPanel;
 import com.google.gwt.user.client.ui.TextBox;
 import com.google.gwt.user.client.ui.Widget;
 import com.sksamuel.jqm4gwt.DataIcon;
+import com.sksamuel.jqm4gwt.HasRel;
 import com.sksamuel.jqm4gwt.HasText;
+import com.sksamuel.jqm4gwt.HasTransition;
 import com.sksamuel.jqm4gwt.IconPos;
 import com.sksamuel.jqm4gwt.JQMCommon;
+import com.sksamuel.jqm4gwt.Mobile;
+import com.sksamuel.jqm4gwt.Transition;
 import com.sksamuel.jqm4gwt.events.HasTapHandlers;
 import com.sksamuel.jqm4gwt.events.JQMComponentEvents;
 import com.sksamuel.jqm4gwt.events.JQMHandlerRegistration;
 import com.sksamuel.jqm4gwt.events.JQMHandlerRegistration.WidgetHandlerCounter;
 import com.sksamuel.jqm4gwt.events.TapEvent;
 import com.sksamuel.jqm4gwt.events.TapHandler;
+import com.sksamuel.jqm4gwt.form.elements.JQMFilterable;
 import com.sksamuel.jqm4gwt.html.CustomFlowPanel;
 import com.sksamuel.jqm4gwt.panel.JQMControlGroup;
 
@@ -39,7 +45,9 @@ import com.sksamuel.jqm4gwt.panel.JQMControlGroup;
  * @author Stephen K Samuel samspade79@gmail.com 5 May 2011 11:21:29
  */
 public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>, HasClickHandlers,
-        HasTapHandlers {
+        HasTapHandlers, HasRel<JQMListItem>, HasTransition<JQMListItem> {
+
+    public static final String STYLE_UI_LI_HAS_THUMB = "ui-li-has-thumb";
 
     /**
      * Element to hold the count bubble
@@ -81,12 +89,13 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
     }
 
     private LiControlGroup controlGroup;
-    private FlowPanel controlGroupRoot;
+    private ComplexPanel controlGroupRoot;
     private TextBox checkBoxInput;
 
     private HandlerRegistration clickHandler;
-
     private HandlerRegistration tapHandler;
+
+    private Object tag;
 
     /**
      * Create empty {@link JQMListItem}
@@ -103,7 +112,6 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
      */
     public JQMListItem(String text) {
         this();
-        if (text == null) throw new RuntimeException("Cannot create list item with null text");
         setText(text);
     }
 
@@ -114,6 +122,11 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
     public JQMListItem(String text, String url) {
         this(text);
         if (url != null) setUrl(url);
+    }
+
+    public JQMListItem(String text, IconPos checkBox) {
+        this(text);
+        setCheckBox(checkBox);
     }
 
     @Override
@@ -174,6 +187,12 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         return this;
     }
 
+    private void insertFirstChild(Element elem) {
+        if (anchor == null) getElement().insertFirst(elem);
+        else if (controlGroup != null) controlGroup.getElement().insertFirst(elem);
+        else anchor.insertFirst(elem);
+    }
+
     private void attachChild(Element elem) {
         if (anchor == null) getElement().appendChild(elem);
         else if (controlGroup != null) controlGroup.getElement().appendChild(elem);
@@ -215,9 +234,24 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         return headerElem != null ? headerElem.getInnerText() : null;
     }
 
-    private void moveAnchorChildrenTo(Element elt) {
+    private void moveAnchorChildrenTo(Element elt, Element... excludes) {
+        List<Node> move = new ArrayList<Node>();
         for (int k = 0; k < anchor.getChildCount(); k++) {
             Node node = anchor.getChild(k);
+            if (excludes.length > 0) {
+                boolean exclude = false;
+                for (int n = 0; n < excludes.length; n++) {
+                    if (node == excludes[n]) {
+                        exclude = true;
+                        break;
+                    }
+                }
+                if (exclude) continue;
+            }
+            move.add(node);
+        }
+        for (int i = 0; i < move.size(); i++) {
+            Node node = move.get(i);
             anchor.removeChild(node);
             elt.appendChild(node);
         }
@@ -265,9 +299,10 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
      */
     public JQMListItem removeImage() {
         if (imageElem != null) {
-            getElement().removeChild(imageElem);
+            imageElem.removeFromParent();
             imageElem = null;
         }
+        getElement().removeClassName(STYLE_UI_LI_HAS_THUMB);
         return this;
     }
 
@@ -335,40 +370,94 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         return this;
     }
 
-    /**
-     * Sets the image to be used to the given src. The image will be set as an
-     * icon.
-     */
-    public JQMListItem setIcon(String src) {
-        setImage(src, true);
-        return this;
-    }
-
     private JQMListItem setId() {
         getElement().setId(Document.get().createUniqueId());
         return this;
     }
 
+    public String getId() {
+        return getElement().getId();
+    }
+
     /**
-     * Sets the image on this list item to the image at the given src. If icon
-     * is true then the image will be set as an icon, otherwise it will be set
-     * as a thumbnail.
+     * Sets the image to be used to the given source url.
+     * <p/> The same as setImage(), but image is marked as icon class.
      */
-    public JQMListItem setImage(String src, boolean icon) {
-        if (src == null)
+    public void setIcon(String src) {
+        setImage(src);
+        if (imageElem != null) {
+            imageElem.removeClassName("jqm4gwt-listitem-thumb");
+            imageElem.addClassName("jqm4gwt-listitem-icon");
+        }
+    }
+
+    /** The same as {@link JQMListItem#setIcon(String)} */
+    public JQMListItem withIcon(String src) {
+        setIcon(src);
+        return this;
+    }
+
+    /**
+     * Sets the image to be used to the given source url.
+     * <p/> The same as setImage(), but image is marked as thumbnail class.
+     */
+    public void setThumbnail(String src) {
+        setImage(src);
+        if (imageElem != null) {
+            imageElem.removeClassName("jqm4gwt-listitem-icon");
+            imageElem.addClassName("jqm4gwt-listitem-thumb");
+        }
+    }
+
+    /** The same as {@link JQMListItem#setThumbnail(String)} */
+    public JQMListItem withThumbnail(String src) {
+        setThumbnail(src);
+        return this;
+    }
+
+    /**
+     * Sets the image on this list item to the given source url.
+     * <p/> Neither 'jqm4gwt-listitem-thumb' nor 'jqm4gwt-listitem-icon' class is added.
+     */
+    public void setImage(String src) {
+        if (src == null) {
             throw new RuntimeException("Cannot set image to null. Call removeImage() if you wanted to remove the image");
+        }
 
         if (imageElem == null) {
             imageElem = Document.get().createImageElement();
-            attachChild(imageElem);
+            // must be first child according to jquery.mobile-1.4.x.css
+            if (anchor != null) anchor.insertFirst(imageElem);
+            else insertFirstChild(imageElem);
         }
         imageElem.setAttribute("src", src);
+        getElement().addClassName(STYLE_UI_LI_HAS_THUMB);
+    }
 
-        if (icon)
-            imageElem.setAttribute("class", "ui-li-icon");
-        else
-            imageElem.removeAttribute("class");
+    /** The same as {@link JQMListItem#setImage(String)} */
+    public JQMListItem withImage(String src) {
+        setImage(src);
         return this;
+    }
+
+    /**
+     * Adds secondary image to this list item. It's forcefully added directly to &lt;li> element.
+     * <p/> Additional CSS is needed to control appearance of this image, for example right side
+     * icon on the static band can be implemented, see <b>jqm4gwt-list-static-item-img-right</b> CSS rule.
+     */
+    public ImageElement addSecondaryImage(String src) {
+        if (src == null) {
+            throw new RuntimeException("Cannot set secondary image to null.");
+        }
+        ImageElement img = Document.get().createImageElement();
+        img.setAttribute("src", src);
+        getElement().appendChild(img);
+        return img;
+    }
+
+    /** For UiBinder, the same as {@link JQMListItem#addSecondaryImage(String)} */
+    public void setSecondaryImage(String src) {
+        addSecondaryImage(src);
     }
 
     @Override
@@ -381,6 +470,10 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
     protected void onUnload() {
         removeItemActivationHandlers();
         super.onUnload();
+    }
+
+    public JQMList getList() {
+        return list;
     }
 
     protected JQMListItem setList(JQMList jqmList) {
@@ -445,15 +538,6 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
             attachChild(headerElem);
         }
         headerElem.setInnerText(text);
-    }
-
-    /**
-     * Sets the image element to type thumbnail and uses the @param src for
-     * the source url of the image
-     */
-    public JQMListItem setThumbnail(String src) {
-        setImage(src, false);
-        return this;
     }
 
     /**
@@ -548,7 +632,8 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
 
     private void checkSplitPadding() {
         if (anchor == null || controlGroup == null) return;
-        anchor.getStyle().setPaddingRight(split == null ? 0 : 42, Unit.PX);
+        // Not needed anymore in jqm 1.4.x
+        // anchor.getStyle().setPaddingRight(split == null ? 0 : 42, Unit.PX);
     }
 
     private void prepareAnchorForControlGroup() {
@@ -576,12 +661,20 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         st.setBorderWidth(0, Unit.PX);
         st.setMarginTop(0, Unit.PX);
         st.setMarginBottom(0, Unit.PX);
+        st.setPaddingTop(0, Unit.PX);
+        st.setPaddingBottom(0, Unit.PX);
 
         FieldSetElement fldSet = Document.get().createFieldSetElement();
         LiControlGroup grp = new LiControlGroup(fldSet, "jqm4gwt-li-controls");
         groupRoot.add(grp);
 
-        if (anchor != null) moveAnchorChildrenTo(fldSet);
+        if (anchor != null) {
+            if (imageElem != null && anchor.equals(imageElem.getParentElement())) {
+                moveAnchorChildrenTo(fldSet, imageElem/*exclude*/);
+            } else {
+                moveAnchorChildrenTo(fldSet);
+            }
+        }
         controlGroupRoot = groupRoot;
         controlGroup = grp;
         if (anchor != null) checkAnchorPanel();
@@ -666,14 +759,23 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         return JQMCommon.getIconPos(controlGroupRoot);
     }
 
+    public boolean isCheckBox() {
+        return checkBoxInput != null;
+    }
+
     public boolean isChecked() {
         if (checkBoxInput == null) return false;
         InputElement cb = checkBoxInput.getElement().cast();
         return cb.isChecked();
     }
 
-    private native void setChecked(InputElement e, boolean value) /*-{
-        $wnd.$(e).prop('checked', value).checkboxradio('refresh');
+    private static native void setChecked(InputElement elt, boolean value) /*-{
+        var w = $wnd.$(elt);
+        if (w.data('mobile-checkboxradio') !== undefined) {
+            w.prop('checked', value).checkboxradio('refresh');
+        } else {
+            w.prop('checked', value);
+        }
     }-*/;
 
     public void setChecked(boolean value) {
@@ -702,4 +804,230 @@ public class JQMListItem extends CustomFlowPanel implements HasText<JQMListItem>
         if (controlGroup == null) return null;
         return controlGroup.getWidget(index);
     }
+
+    public boolean isActiveHighlight() {
+        if (anchor == null) return false;
+        return JQMCommon.isBtnActive(anchor);
+    }
+
+    public void setActiveHighlight(boolean value) {
+        if (anchor == null) return;
+        JQMCommon.setBtnActive(anchor, value);
+    }
+
+    /**
+     * @return - true if this item was filtered out by {@link JQMFilterable}.
+     */
+    public boolean isFilteredOut() {
+        return JQMCommon.hasStyle(this, "ui-screen-hidden");
+    }
+
+    @Override
+    public String getRel() {
+        return anchor != null ? JQMCommon.getAttribute(anchor, "data-rel") : null;
+    }
+
+    @Override
+    public void setRel(String rel) {
+        if (anchor == null) {
+            if (rel != null && !rel.isEmpty()) {
+                setUrl("#");
+            } else {
+                return;
+            }
+        }
+        if (anchor != null) JQMCommon.setAttribute(anchor, "data-rel", rel);
+    }
+
+    @Override
+    public JQMListItem withRel(String rel) {
+        setRel(rel);
+        return this;
+    }
+
+    public String getSplitRel() {
+        return split != null ? JQMCommon.getAttribute(split, "data-rel") : null;
+    }
+
+    public void setSplitRel(String rel) {
+        if (split == null) {
+            if (rel != null && !rel.isEmpty()) {
+                setSplitHref("#");
+            } else {
+                return;
+            }
+        }
+        if (split != null) JQMCommon.setAttribute(split, "data-rel", rel);
+    }
+
+    /**
+     * Returns true if this list item is set to load a popup
+     */
+    public boolean isPopup() {
+        return "popup".equals(getRel());
+    }
+
+    public void setPopup(boolean popup) {
+        setRel(popup ? "popup" : null);
+    }
+
+    public JQMListItem withPopup(boolean popup) {
+        setPopup(popup);
+        return this;
+    }
+
+    public String getPopupPos() {
+        return anchor != null ? JQMCommon.getPopupPos(anchor) : null;
+    }
+
+    public void setPopupPos(String pos) {
+        if (anchor == null) {
+            if (pos != null && !pos.isEmpty()) {
+                setUrl("#");
+            } else {
+                return;
+            }
+        }
+        if (anchor != null) JQMCommon.setPopupPos(anchor, pos);
+    }
+
+    /**
+     * Returns true if this list item is set to load the linked page as a dialog page
+     */
+    public boolean isDialog() {
+        return Mobile.DATA_ROLE_DIALOG.equals(getRel());
+    }
+
+    /**
+     * Sets this list item to call a dialog item. This changes the look and feel
+     * of the page that is loaded as a consequence of clicking on this item.
+     */
+    public void setDialog(boolean dialog) {
+        setRel(dialog ? Mobile.DATA_ROLE_DIALOG : null);
+    }
+
+    public JQMListItem withDialog(boolean dialog) {
+        setDialog(dialog);
+        return this;
+    }
+
+    @Override
+    public Transition getTransition() {
+        return anchor != null ? JQMCommon.getTransition(anchor) : null;
+    }
+
+    /**
+     * Sets the transition to be used by this list item when loading the URL.
+     */
+    @Override
+    public void setTransition(Transition transition) {
+        if (anchor == null) {
+            if (transition != null) {
+                setUrl("#");
+            } else {
+                return;
+            }
+        }
+        if (anchor != null) JQMCommon.setTransition(anchor, transition);
+    }
+
+    @Override
+    public JQMListItem withTransition(Transition transition) {
+        setTransition(transition);
+        return this;
+    }
+
+    /**
+     * Returns true if this list item split part is set to load a popup
+     */
+    public boolean isSplitPopup() {
+        return "popup".equals(getSplitRel());
+    }
+
+    public void setSplitPopup(boolean popup) {
+        setSplitRel(popup ? "popup" : null);
+    }
+
+    public JQMListItem withSplitPopup(boolean popup) {
+        setSplitPopup(popup);
+        return this;
+    }
+
+    public String getSplitPopupPos() {
+        return split != null ? JQMCommon.getPopupPos(split) : null;
+    }
+
+    public void setSplitPopupPos(String pos) {
+        if (split == null) {
+            if (pos != null && !pos.isEmpty()) {
+                setSplitHref("#");
+            } else {
+                return;
+            }
+        }
+        if (split != null) JQMCommon.setPopupPos(split, pos);
+    }
+
+    /**
+     * Returns true if this list item split part is set to load the linked page as a dialog page
+     */
+    public boolean isSplitDialog() {
+        return Mobile.DATA_ROLE_DIALOG.equals(getSplitRel());
+    }
+
+    /**
+     * Sets this list item split part to call a dialog item. This changes the look and feel
+     * of the page that is loaded as a consequence of clicking on this item.
+     */
+    public void setSplitDialog(boolean dialog) {
+        setSplitRel(dialog ? Mobile.DATA_ROLE_DIALOG : null);
+    }
+
+    public JQMListItem withSplitDialog(boolean dialog) {
+        setSplitDialog(dialog);
+        return this;
+    }
+
+    public Transition getSplitTransition() {
+        return split != null ? JQMCommon.getTransition(split) : null;
+    }
+
+    /**
+     * Sets the transition to be used by this list item split part when loading the URL.
+     */
+    public void setSplitTransition(Transition transition) {
+        if (split == null) {
+            if (transition != null) {
+                setSplitHref("#");
+            } else {
+                return;
+            }
+        }
+        if (split != null) JQMCommon.setTransition(split, transition);
+    }
+
+    public JQMListItem withSplitTransition(Transition transition) {
+        setSplitTransition(transition);
+        return this;
+    }
+
+    public Object getTag() {
+        return tag;
+    }
+
+    /**
+     * Additional information can be attached to list item (for example linked JQMListDivider).
+     */
+    public void setTag(Object tag) {
+        this.tag = tag;
+    }
+
+    public String getTagStr() {
+        return tag != null ? tag.toString() : null;
+    }
+
+    public void setTagStr(String value) {
+        setTag(value);
+    }
+
 }

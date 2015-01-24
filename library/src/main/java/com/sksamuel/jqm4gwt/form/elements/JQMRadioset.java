@@ -6,8 +6,6 @@ import java.util.List;
 import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.event.dom.client.BlurHandler;
-import com.google.gwt.event.dom.client.ChangeEvent;
-import com.google.gwt.event.dom.client.ChangeHandler;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.HasClickHandlers;
@@ -117,9 +115,9 @@ public class JQMRadioset extends JQMFieldContainer implements HasText<JQMRadiose
 
     private void addRadiosBlurHandler(final BlurHandler handler) {
         for (TextBox radio : radios) {
-            blurHandlers.add(radio.addChangeHandler(new ChangeHandler() {
+            blurHandlers.add(radio.addClickHandler(new ClickHandler() {
                 @Override
-                public void onChange(ChangeEvent event) {
+                public void onClick(ClickEvent event) {
                     handler.onBlur(null);
                 }
             }));
@@ -252,9 +250,9 @@ public class JQMRadioset extends JQMFieldContainer implements HasText<JQMRadiose
         if (!valueChangeHandlerInitialized) {
             valueChangeHandlerInitialized = true;
             for (TextBox radio : radios) {
-                radio.addChangeHandler(new ChangeHandler() {
+                radio.addClickHandler(new ClickHandler() {
                     @Override
-                    public void onChange(ChangeEvent event) {
+                    public void onClick(ClickEvent event) {
                         SelectionEvent.fire(JQMRadioset.this, getValue());
                         ValueChangeEvent.fire(JQMRadioset.this, getValue());
                     }
@@ -294,7 +292,7 @@ public class JQMRadioset extends JQMFieldContainer implements HasText<JQMRadiose
     public String getValue() {
         for (TextBox radio : radios) {
             Element element = radio.getElement();
-            if (isChecked(element.getId())) {
+            if (isChecked(element)) {
                 return element.getAttribute("value");
             }
         }
@@ -427,23 +425,36 @@ public class JQMRadioset extends JQMFieldContainer implements HasText<JQMRadiose
     }
 
     protected boolean isChecked(TextBox radio) {
-        return radio != null && isChecked(radio.getElement().getId());
+        return radio != null && isChecked(radio.getElement());
     }
 
-    private native boolean isChecked(String id) /*-{
-        return $wnd.$("input#" + id).prop("checked") ? true : false;
+    private static native boolean isChecked(Element elt) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return false; // jQuery is not loaded
+        return $wnd.$(elt).prop("checked") ? true : false;
     }-*/;
 
-    private native void setCheckedAndRefresh(Element e, boolean value) /*-{
-        $wnd.$(e).prop('checked', value).checkboxradio('refresh');
+    private static native void setCheckedAndRefresh(Element elt, boolean value) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
+        var w = $wnd.$(elt);
+        if (w.data('mobile-checkboxradio') !== undefined) {
+            w.prop('checked', value).checkboxradio('refresh');
+        } else {
+            w.prop('checked', value);
+        }
     }-*/;
 
-    private native void setChecked(Element e, boolean value) /*-{
-        $wnd.$(e).prop('checked', value);
+    private static native void setChecked(Element elt, boolean value) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
+        $wnd.$(elt).prop('checked', value);
     }-*/;
 
-    protected native void refreshAll() /*-{
-        $wnd.$("input[type='radio']").checkboxradio("refresh");
+    protected static native void refreshAll() /*-{
+        $wnd.$("input[type='radio']").each(function() {
+            var w = $wnd.$(this);
+            if (w.data('mobile-checkboxradio') !== undefined) {
+                w.checkboxradio('refresh');
+            }
+        });
     }-*/;
 
     @Override

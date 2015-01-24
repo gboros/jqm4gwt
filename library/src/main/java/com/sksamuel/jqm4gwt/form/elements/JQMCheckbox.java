@@ -1,14 +1,14 @@
 package com.sksamuel.jqm4gwt.form.elements;
 
+import com.google.gwt.dom.client.Document;
 import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.InputElement;
-import com.google.gwt.event.dom.client.ChangeEvent;
-import com.google.gwt.event.dom.client.ChangeHandler;
+import com.google.gwt.event.dom.client.ClickEvent;
+import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.logical.shared.ValueChangeEvent;
 import com.google.gwt.event.logical.shared.ValueChangeHandler;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.uibinder.client.UiConstructor;
-import com.google.gwt.user.client.Window;
 import com.google.gwt.user.client.ui.Composite;
 import com.google.gwt.user.client.ui.FlowPanel;
 import com.google.gwt.user.client.ui.HasValue;
@@ -16,6 +16,7 @@ import com.google.gwt.user.client.ui.TextBox;
 import com.google.gwt.user.client.ui.Widget;
 import com.sksamuel.jqm4gwt.HasCorners;
 import com.sksamuel.jqm4gwt.HasIconPos;
+import com.sksamuel.jqm4gwt.HasInline;
 import com.sksamuel.jqm4gwt.HasMini;
 import com.sksamuel.jqm4gwt.HasText;
 import com.sksamuel.jqm4gwt.HasTheme;
@@ -32,7 +33,7 @@ import com.sksamuel.jqm4gwt.html.FormLabel;
  */
 public class JQMCheckbox extends Composite implements HasText<JQMCheckbox>, HasValue<Boolean>,
         HasMini<JQMCheckbox>, HasTheme<JQMCheckbox>, HasIconPos<JQMCheckbox>,
-        HasCorners<JQMCheckbox> {
+        HasCorners<JQMCheckbox>, HasInline<JQMCheckbox> {
 
     private TextBox input;
 
@@ -68,13 +69,14 @@ public class JQMCheckbox extends Composite implements HasText<JQMCheckbox>, HasV
     @UiConstructor
     public JQMCheckbox(String name, String text) {
         this();
+        String id = Document.get().createUniqueId();
         TextBox input = new TextBox();
-        input.getElement().setId(name);
+        input.getElement().setId(id);
         input.getElement().setAttribute("type", "checkbox");
         input.setName(name);
 
         FormLabel label = new FormLabel();
-        label.setFor(name);
+        label.setFor(id);
         label.setText(text);
 
         init(input, label, id);
@@ -98,9 +100,9 @@ public class JQMCheckbox extends Composite implements HasText<JQMCheckbox>, HasV
         // Initialization code
         if (!valueChangeHandlerInitialized) {
             valueChangeHandlerInitialized = true;
-            input.addChangeHandler(new ChangeHandler() {
+            input.addClickHandler(new ClickHandler() {
                 @Override
-                public void onChange(ChangeEvent event) {
+                public void onClick(ClickEvent event) {
                     ValueChangeEvent.fire(JQMCheckbox.this, getValue());
                 }
             });
@@ -197,27 +199,31 @@ public class JQMCheckbox extends Composite implements HasText<JQMCheckbox>, HasV
         }
     }
 
-    private native void setChecked(Element e, boolean value) /*-{
-        $wnd.$(e).prop('checked', value).checkboxradio('refresh');
+    private static native void setChecked(Element elt, boolean value) /*-{
+        var w = $wnd.$(elt);
+        if (w.data('mobile-checkboxradio') !== undefined) {
+            w.prop('checked', value).checkboxradio('refresh');
+        } else {
+            w.prop('checked', value);
+        }
     }-*/;
 
-    private native void refresh(Element e) /*-{
-      $wnd.$(e).checkboxradio('refresh');
+    private static native void refresh(Element elt) /*-{
+      var w = $wnd.$(elt);
+      if (w.data('mobile-checkboxradio') !== undefined) {
+          w.checkboxradio('refresh');
+      }
     }-*/;
 
     public void setInput(TextBox input) {
         this.input = input;
-        input.addChangeHandler(new ChangeHandler() {
+        input.addClickHandler(new ClickHandler() {
             @Override
-            public void onChange(ChangeEvent event) {
+            public void onClick(ClickEvent event) {
                 internVal = isChecked(); // user touched the checkbox, we must take current ui value
                 //showMsg("setInput: " + (internVal ? "checked" : "unchecked"));
             }
         });
-    }
-
-    private static void showMsg(String s) {
-        Window.alert(s);
     }
 
     public void setId(String id) {
@@ -272,10 +278,14 @@ public class JQMCheckbox extends Composite implements HasText<JQMCheckbox>, HasV
                     @Override
                     public void onInit(JQMPageEvent event) {
                         super.onInit(event);
-                        IconPos p = getIconPos();
-                        if (p != iconPos) {
+                        IconPos pos = getIconPos();
+                        if (pos != iconPos) {
                             setIconPos(iconPos);
                             refresh(input.getElement());
+                        }
+                        // Also data-corners is ignored, and 'ui-corner-all' class is added on init
+                        if (JQMCommon.isCorners(label) != JQMCommon.isCornersEx(label)) {
+                            setCorners(JQMCommon.isCorners(label));
                         }
                     }
                 });
@@ -287,17 +297,33 @@ public class JQMCheckbox extends Composite implements HasText<JQMCheckbox>, HasV
 
     @Override
     public boolean isCorners() {
-        return JQMCommon.isCorners(label);
+        return JQMCommon.isCornersEx(label);
     }
 
     @Override
     public void setCorners(boolean corners) {
-        JQMCommon.setCorners(label, corners);
+        JQMCommon.setCornersEx(label, corners);
     }
 
     @Override
     public JQMCheckbox withCorners(boolean corners) {
         setCorners(corners);
+        return this;
+    }
+
+    @Override
+    public void setInline(boolean value) {
+        JQMCommon.setInlineEx(getElement(), value, "ui-inline");
+    }
+
+    @Override
+    public boolean isInline() {
+        return JQMCommon.isInlineEx(getElement(), "ui-inline");
+    }
+
+    @Override
+    public JQMCheckbox withInline(boolean value) {
+        setInline(value);
         return this;
     }
 

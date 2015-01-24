@@ -2,14 +2,22 @@ package com.sksamuel.jqm4gwt.html;
 
 import com.google.gwt.dom.client.AnchorElement;
 import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
 import com.google.gwt.dom.client.ImageElement;
+import com.google.gwt.dom.client.SpanElement;
+import com.google.gwt.dom.client.Style;
+import com.google.gwt.dom.client.Style.Display;
+import com.google.gwt.dom.client.Style.Unit;
+import com.google.gwt.dom.client.Style.VerticalAlign;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.HasClickHandlers;
 import com.google.gwt.event.shared.GwtEvent.Type;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.user.client.ui.HasEnabled;
+import com.google.gwt.user.client.ui.UIObject;
 import com.google.gwt.user.client.ui.Widget;
+import com.sksamuel.jqm4gwt.HasText;
 import com.sksamuel.jqm4gwt.JQMCommon;
 import com.sksamuel.jqm4gwt.Orientation;
 import com.sksamuel.jqm4gwt.events.HasTapHandlers;
@@ -22,11 +30,12 @@ import com.sksamuel.jqm4gwt.events.TapHandler;
 /**
  * @author Stephen K Samuel samspade79@gmail.com 17 Jul 2011 15:38:47
  * <p/>
- *         An implementation of an anchor tag that wraps an image tag.
+ *         An implementation of an anchor tag that wraps an image tag and optional text.
  *         <pre> &lt;a href='mylink'>&lt;img src='myimage'/>&lt;/a> </pre>
  *
  */
-public class ImageLink extends Widget implements HasClickHandlers, HasTapHandlers, HasEnabled {
+public class ImageLink extends Widget implements HasClickHandlers, HasTapHandlers, HasEnabled,
+        HasText<ImageLink> {
 
     protected static final String JQM4GWT_IMAGE_LINK_A = "jqm4gwt-image-link-a";
     protected static final String JQM4GWT_IMAGE_LINK_IMG = "jqm4gwt-image-link-img";
@@ -34,6 +43,7 @@ public class ImageLink extends Widget implements HasClickHandlers, HasTapHandler
 
     protected ImageElement img;
     protected AnchorElement a;
+    protected SpanElement txt;
 
     public ImageLink() {
         a = Document.get().createAnchorElement();
@@ -54,6 +64,8 @@ public class ImageLink extends Widget implements HasClickHandlers, HasTapHandler
     protected void initImg() {
         setStyleName(img, JQM4GWT_IMAGE_LINK_IMG);
         setImageResizePriority(Orientation.HORIZONTAL);
+        img.getStyle().setVerticalAlign(VerticalAlign.TOP); // eliminates excessive/strange margin at the bottom
+        img.getStyle().setDisplay(Display.NONE);
     }
 
     public ImageLink(String href, String src) {
@@ -77,6 +89,25 @@ public class ImageLink extends Widget implements HasClickHandlers, HasTapHandler
      */
     public void setSrc(String src) {
         img.setAttribute("src", src);
+        refreshPositioning();
+    }
+
+    private void refreshPositioning() {
+        String src = getSrc();
+        String text = getText();
+        Style imgSt = img.getStyle();
+        if (src == null || src.isEmpty()) {
+            imgSt.setVerticalAlign(VerticalAlign.TOP);
+            imgSt.clearMarginRight();
+            imgSt.setDisplay(Display.NONE);
+            if (txt != null) txt.getStyle().setVerticalAlign(VerticalAlign.TOP);
+        } else {
+            imgSt.setVerticalAlign(VerticalAlign.MIDDLE);
+            imgSt.clearDisplay();
+            if (txt != null) txt.getStyle().setVerticalAlign(VerticalAlign.MIDDLE);
+            if (text == null || text.isEmpty()) imgSt.clearMarginRight();
+            else imgSt.setMarginRight(0.3d, Unit.EM);
+        }
     }
 
     /**
@@ -93,7 +124,7 @@ public class ImageLink extends Widget implements HasClickHandlers, HasTapHandler
      */
     @Override
     public void setWidth(String width) {
-        img.setAttribute("width", width);
+        img.getStyle().setProperty("width", width);
     }
 
     /**
@@ -101,7 +132,7 @@ public class ImageLink extends Widget implements HasClickHandlers, HasTapHandler
      */
     @Override
     public void setHeight(String height) {
-        img.setAttribute("height", height);
+        img.getStyle().setProperty("height", height);
     }
 
     public Orientation getImageResizePriority() {
@@ -147,5 +178,41 @@ public class ImageLink extends Widget implements HasClickHandlers, HasTapHandler
     @Override
     public void setEnabled(boolean enabled) {
         JQMCommon.setEnabled(this, enabled);
+    }
+
+    /**
+     * Gives realistic visibility (parent chain considered, ...)
+     * If you need logical visibility of this particular widget,
+     * use {@link UIObject#isVisible(Element elem)}
+     */
+    @Override
+    public boolean isVisible() {
+        return super.isVisible() && JQMCommon.isVisible(this);
+    }
+
+    @Override
+    public String getText() {
+        return txt != null ? txt.getInnerText() : null;
+    }
+
+    @Override
+    public void setText(String text) {
+        boolean emptyText = text == null || text.isEmpty();
+        if (emptyText) {
+            if (txt != null) txt.setInnerText(text);
+        } else {
+            if (txt == null) {
+                txt = Document.get().createSpanElement();
+                a.appendChild(txt);
+            }
+            txt.setInnerText(text);
+        }
+        refreshPositioning();
+    }
+
+    @Override
+    public ImageLink withText(String text) {
+        setText(text);
+        return this;
     }
 }

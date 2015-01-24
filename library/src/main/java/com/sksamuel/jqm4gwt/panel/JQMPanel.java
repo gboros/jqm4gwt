@@ -15,25 +15,24 @@ import com.sksamuel.jqm4gwt.list.JQMListItem;
 
 /**
  * @author Stephen K Samuel samspade79@gmail.com 11 Jul 2011 22:13:36
- *         <p/>
- *         A panel that contains multiple child widgets. The child widgets can
- *         be either {@link JQMWidget} widgets or regular GWT {@link Widget}
- *         widgets.
- *         <p/>
- *         The panel can use any HTML element type as the containing element. So
- *         for example, this class can be used by {@link JQMListItem} as an <li>
- *         element panel, or by {@link JQMSelect} as a <select> element panel.
- *         <p/>
- *         This is the reason for the existence of this class. Jquery mobile
- *         uses many elements as containers for other elements. GWT does not
- *         natively support panels other than div based panels.
- *         <p/>
- *         This panel implements {@link HasTheme} but this does not necessarily
- *         have any effect. It depends on where the panel is being used.
- *         <p/>
- *         Typcially this class will only be used for implementing JQM Widgets
- *         and users of the jqm4gwt framework will want to use a normal GWT
- *         {@link Panel} instance.
+ * <p/>
+ * A panel that contains multiple child widgets. The child widgets can
+ * be either {@link JQMWidget} widgets or regular GWT {@link Widget} widgets.
+ * <p/>
+ * The panel can use any HTML element type as the containing element. So
+ * for example, this class can be used by {@link JQMListItem} as an &lt;li>
+ * element panel, or by {@link JQMSelect} as a &lt;select> element panel.
+ * <p/>
+ * This is the reason for the existence of this class. Jquery mobile
+ * uses many elements as containers for other elements. GWT does not
+ * natively support panels other than div based panels.
+ * <p/>
+ * This panel implements {@link HasTheme} but this does not necessarily
+ * have any effect. It depends on where the panel is being used.
+ * <p/>
+ * Typcially this class will only be used for implementing JQM Widgets
+ * and users of the jqm4gwt framework will want to use a normal GWT
+ * {@link Panel} instance.
  */
 public class JQMPanel extends ComplexPanel implements HasId<JQMPanel>, HasTheme<JQMPanel> {
 
@@ -78,7 +77,8 @@ public class JQMPanel extends ComplexPanel implements HasId<JQMPanel>, HasTheme<
 
     @Override
     public void add(Widget w) {
-        add(w, getElement());
+        Element elt = getElement();
+        add(w, elt);
     }
 
     @Override
@@ -105,19 +105,20 @@ public class JQMPanel extends ComplexPanel implements HasId<JQMPanel>, HasTheme<
     }
 
     public void hide() {
-        hide(getId());
+        hide(getElement());
     }
 
-    private native void hide(String id) /*-{
-                            $wnd.$("#" + id).hide();
-							}-*/;
+    private static native void hide(Element elt) /*-{
+        $wnd.$(elt).hide();
+    }-*/;
 
     public void insert(IsWidget w, int beforeIndex) {
         insert(asWidgetOrNull(w), beforeIndex);
     }
 
     public void insert(Widget w, int beforeIndex) {
-        insert(w, getElement(), beforeIndex, true);
+        Element elt = getElement();
+        insert(w, elt, beforeIndex, true);
     }
 
     protected void removeAttribute(String name) {
@@ -165,10 +166,10 @@ public class JQMPanel extends ComplexPanel implements HasId<JQMPanel>, HasTheme<
     }
 
     public void show() {
-        show(getAttribute("id"));
+        show(getElement());
     }
 
-    private native void show(String id) /*-{
-                            $wnd.$("#" + id).show();
-							}-*/;
+    private static native void show(Element elt) /*-{
+        $wnd.$(elt).show();
+    }-*/;
 }

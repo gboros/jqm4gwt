@@ -1,0 +1,16 @@
+<ui:UiBinder 
+  xmlns:ui='urn:ui:com.google.gwt.uibinder'
+  xmlns:g='urn:import:com.google.gwt.user.client.ui'
+  xmlns:jqm='urn:import:com.sksamuel.jqm4gwt'
+  xmlns:t='urn:import:com.sksamuel.jqm4gwt.toolbar'
+  xmlns:b="urn:import:com.sksamuel.jqm4gwt.button">
+  
+  <t:JQMPanel panelId="globalPanel1" external="true" position="RIGHT" display="OVERLAY" theme="b">
+    <t:widget>
+      <jqm:html.Heading.H3 text="Some global content could be placed here..." />
+    </t:widget>
+    <t:widget>
+      <b:JQMButton text="Close" builtInIcon="DELETE" rel="close" />
+    </t:widget>
+  </t:JQMPanel>
+</ui:UiBinder>

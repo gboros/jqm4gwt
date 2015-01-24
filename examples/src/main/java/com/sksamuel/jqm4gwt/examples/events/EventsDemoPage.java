@@ -20,8 +20,8 @@ import com.sksamuel.jqm4gwt.toolbar.JQMHeader;
 
 /**
  * @author Stephen K Samuel samspade79@gmail.com 9 Jul 2011 18:00:50
- * 
- * 
+ *
+ *
  */
 public class EventsDemoPage extends JQMPage {
 
@@ -29,15 +29,16 @@ public class EventsDemoPage extends JQMPage {
 		super("eventspage");
 
 		final JQMHeader header = new JQMHeader("Events demo");
+		header.setBackButton(true);
 		JQMButton right = new JQMButton("View source",
-				"https://github.com/sksamuel/jqm4gwt-examples/blob/master/src/main/java/com/sksamuel/jqm4gwt/examples/events/EventsDemoPage.java");
+		        "https://github.com/sksamuel/jqm4gwt/blob/master/examples/src/main/java/com/sksamuel/jqm4gwt/examples/events/EventsDemoPage.java");
 		right.withBuiltInIcon(DataIcon.GEAR);
-		right.setExternal();
+		right.setExternal(true);
 		header.setRightButton(right);
 
 		final JQMButton left = new JQMButton("ClickMe");
 		left.withBuiltInIcon(DataIcon.STAR);
-		left.setExternal();
+		left.setExternal(true);
 		left.addClickHandler(new ClickHandler() {
 
 			@Override
@@ -45,7 +46,8 @@ public class EventsDemoPage extends JQMPage {
 				Window.alert("You clicked me!");
 			}
 		});
-		header.setLeftButton(left);
+		left.setInline(true);
+		header.add(left);
 		add(header);
 
 		add(new Paragraph("Events are some of the most convenient part of GWT. "
@@ -78,7 +80,8 @@ public class EventsDemoPage extends JQMPage {
 		});
 		add(button1);
 
-		final JQMFlip flip = new JQMFlip("Flip me", "Shiraz", "Merlot");
+		final JQMFlip flip = new JQMFlip("Flip me", "Shiraz Pink", "Merlot Dark");
+		flip.setDataWrapper("size10flipswitch");
 		flip.addClickHandler(new ClickHandler() {
 
 			@Override

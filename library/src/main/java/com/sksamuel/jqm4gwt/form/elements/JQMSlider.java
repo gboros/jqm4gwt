@@ -14,6 +14,7 @@ import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.user.client.ui.FlowPanel;
 import com.google.gwt.user.client.ui.HasValue;
 import com.google.gwt.user.client.ui.TextBox;
+import com.sksamuel.jqm4gwt.HasCorners;
 import com.sksamuel.jqm4gwt.HasMini;
 import com.sksamuel.jqm4gwt.HasText;
 import com.sksamuel.jqm4gwt.JQMCommon;
@@ -30,10 +31,10 @@ import com.sksamuel.jqm4gwt.html.FormLabel;
  * @author Stephen K Samuel samspade79@gmail.com 10 May 2011 00:24:06
  *
  * <p/> An implementation of a jquery mobile "slider" widget.
- * <p/> See <a href="http://view.jquerymobile.com/1.3.2/dist/demos/widgets/sliders/">Slider</a>
+ * <p/> See <a href="http://demos.jquerymobile.com/1.4.5/slider/">Slider</a>
  */
 public class JQMSlider extends JQMFieldContainer implements HasValue<Double>, HasMini<JQMSlider>,
-        HasText<JQMSlider>, HasChangeHandlers, HasClickHandlers, HasTapHandlers {
+        HasText<JQMSlider>, HasCorners<JQMSlider>, HasChangeHandlers, HasClickHandlers, HasTapHandlers {
 
     private final FormLabel label = new FormLabel();
 
@@ -140,7 +141,8 @@ public class JQMSlider extends JQMFieldContainer implements HasValue<Double>, Ha
         disable(input.getElement().getId());
     }
 
-    private native void disable(String id)/*-{
+    // XXX: Warning! 'String id' cannot be replaced by 'Element elt', because $("#" + id) not equal $(elt) for this widget!
+    private static native void disable(String id) /*-{
         $wnd.$("#" + id).slider('disable');
     }-*/;
 
@@ -148,7 +150,7 @@ public class JQMSlider extends JQMFieldContainer implements HasValue<Double>, Ha
         enable(input.getElement().getId());
     }
 
-    private native void enable(String id) /*-{
+    private static native void enable(String id) /*-{
         $wnd.$("#" + id).slider('enable');
     }-*/;
 
@@ -211,35 +213,37 @@ public class JQMSlider extends JQMFieldContainer implements HasValue<Double>, Ha
      * @return - null if slider is not created/initialized/attached yet and therefore have no UI value.
      */
     private Double getUiValue() {
-        String v = getValue(input.getElement().getId());
+        String v = JQMCommon.getVal(input.getElement().getId());
         if (v == null || v.isEmpty()) return null;
         return Double.valueOf(v);
     }
 
-    private native String getValue(String id) /*-{
-        return $wnd.$("#" + id).val();
-    }-*/;
-
     /**
      * Can raise ChangeEvent, block it manually by setting ignoreChange (if needed).
      */
-    private native void refresh(String id, String value) /*-{
+    // XXX: Warning! 'String id' cannot be replaced by 'Element elt', because $("#" + id) not equal $(elt) for this widget!
+    private static native void refresh(String id, String value) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
         $wnd.$("#" + id).val(value).slider("refresh");
     }-*/;
 
-    private native void refresh(String id) /*-{
+    private static native void refresh(String id) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
         $wnd.$("#" + id).slider("refresh");
     }-*/;
 
-    private native void refreshMin(String id, String min) /*-{
+    private static native void refreshMin(String id, String min) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
         $wnd.$("#" + id).attr("min", min).slider("refresh");
     }-*/;
 
-    private native void refreshMax(String id, String max) /*-{
+    private static native void refreshMax(String id, String max) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
         $wnd.$("#" + id).attr("max", max).slider("refresh");
     }-*/;
 
-    private native void refreshStep(String id, String step) /*-{
+    private static native void refreshStep(String id, String step) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
         $wnd.$("#" + id).attr("step", step).slider("refresh");
     }-*/;
 
@@ -487,5 +491,21 @@ public class JQMSlider extends JQMFieldContainer implements HasValue<Double>, Ha
             ignoreChange = false;
         }
         if (fireEvents) ValueChangeEvent.fire(this, value);
+    }
+
+    @Override
+    public boolean isCorners() {
+        return JQMCommon.isCorners(input);
+    }
+
+    @Override
+    public void setCorners(boolean corners) {
+        JQMCommon.setCorners(input, corners);
+    }
+
+    @Override
+    public JQMSlider withCorners(boolean corners) {
+        setCorners(corners);
+        return this;
     }
 }

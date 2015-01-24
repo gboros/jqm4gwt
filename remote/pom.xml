@@ -5,7 +5,7 @@
     <parent>
         <groupId>com.sksamuel.jqm4gwt</groupId>
         <artifactId>jqm4gwt</artifactId>
-        <version>1.4.0-SNAPSHOT</version>
+        <version>1.4.4-SNAPSHOT</version>
     </parent>
 
     <artifactId>jqm4gwt-remote</artifactId>
@@ -41,6 +41,7 @@
 
             <plugin>
                 <artifactId>maven-source-plugin</artifactId>
+                <version>${maven.plugin.source.version}</version>
                 <executions>
                     <execution>
                         <id>attach-sources</id>
@@ -53,6 +54,7 @@
 
             <plugin>
                 <artifactId>maven-dependency-plugin</artifactId>
+                <version>${maven.plugin.dependency.version}</version>
                 <executions>
                     <execution>
                         <id>bring-in-jqm4gwt-sources</id>
@@ -70,7 +72,12 @@
                                     <classifier>sources</classifier>
                                     <overWrite>false</overWrite>
                                     <outputDirectory>${source.staging}</outputDirectory>
-                                    <excludes>META-INF/**, **/Jqm4gwt.gwt.xml</excludes>
+                                    <excludes>
+                                      META-INF/**, **/Jqm4gwt.gwt.xml,
+                                      **/jqm4gwt/JQMInitializer.java, **/jqm4gwt/Resources.java,
+                                      **/jqm4gwt/ScriptUtils.java,
+                                      **/jqm4gwt/SequentialScriptInjector.java
+                                    </excludes>
                                 </artifactItem>
                             </artifactItems>
                         </configuration>
@@ -81,6 +88,7 @@
             <plugin>
                 <groupId>org.codehaus.mojo</groupId>
                 <artifactId>build-helper-maven-plugin</artifactId>
+                <version>1.8</version>
                 <executions>
                     <execution>
                         <id>add-source</id>
@@ -102,6 +110,9 @@
         <resources>
             <resource>
                 <directory>${source.staging}</directory>
+            </resource>
+            <resource>
+                <directory>src/main/java</directory>
             </resource>
             <resource>
                 <directory>src/main/resources</directory>

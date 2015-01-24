@@ -1,6 +1,17 @@
 package com.sksamuel.jqm4gwt.button;
 
+import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Map.Entry;
+
+import com.google.gwt.core.client.JavaScriptObject;
+import com.google.gwt.core.client.JsArrayString;
+import com.google.gwt.core.client.Scheduler;
 import com.google.gwt.dom.client.Element;
+import com.google.gwt.dom.client.Style;
 import com.google.gwt.event.dom.client.ClickEvent;
 import com.google.gwt.event.dom.client.ClickHandler;
 import com.google.gwt.event.dom.client.HasClickHandlers;
@@ -19,9 +30,13 @@ import com.sksamuel.jqm4gwt.HasRel;
 import com.sksamuel.jqm4gwt.HasText;
 import com.sksamuel.jqm4gwt.HasTransition;
 import com.sksamuel.jqm4gwt.IconPos;
+import com.sksamuel.jqm4gwt.JQMCommon;
 import com.sksamuel.jqm4gwt.JQMContainer;
+import com.sksamuel.jqm4gwt.JQMContext;
 import com.sksamuel.jqm4gwt.JQMPage;
+import com.sksamuel.jqm4gwt.JQMPageEvent;
 import com.sksamuel.jqm4gwt.JQMWidget;
+import com.sksamuel.jqm4gwt.Mobile;
 import com.sksamuel.jqm4gwt.Transition;
 import com.sksamuel.jqm4gwt.events.HasTapHandlers;
 import com.sksamuel.jqm4gwt.events.JQMComponentEvents;
@@ -32,13 +47,77 @@ import com.sksamuel.jqm4gwt.events.TapHandler;
 
 /**
  * @author Stephen K Samuel samspade79@gmail.com 5 May 2011 14:02:24
- *         <p/>
- *         An implementation of a Jquery mobile button
- * @link http://jquerymobile.com/demos/1.2.0/docs/buttons/buttons-types.html
+ * <p/>
+ * An implementation of a Jquery mobile button.
+ * <p/>See <a href="http://demos.jquerymobile.com/1.4.5/button-markup/">Buttons</a>
+ * <p/>See also <a href="http://jquerymobile.com/demos/1.2.1/docs/buttons/buttons-types.html">Button basics</a>
  */
 public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<JQMButton>,
         HasTransition<JQMButton>, HasClickHandlers, HasInline<JQMButton>,
-        HasIcon<JQMButton>, HasCorners<JQMButton>, HasIconShadow<JQMButton>, HasMini<JQMButton>, HasTapHandlers {
+        HasIcon<JQMButton>, HasCorners<JQMButton>, HasIconShadow<JQMButton>, HasMini<JQMButton>,
+        HasTapHandlers {
+
+    private static final String[] HOVER_PROPS = { "background-color", "color", "border-color", "text-shadow" };
+
+    private static final String[] HOVER_REGEX = { "^border-\\S*color$", "^border-\\S*color-value$" };
+
+    /** FindRegex/Replacement pairs */
+    private static final String[] HOVER_REPLACE = { "color-value", "color" };
+
+    /** Heuristics based on jquery.mobile.css definitions */
+    private static final Map<String, String> currentThemeSearch = new LinkedHashMap<String, String>();
+
+    private static final Map<String, JavaScriptObject> cachedCssRules = new HashMap<String, JavaScriptObject>();
+
+    private boolean alwaysActive;
+    private boolean alwaysHover;
+    private JavaScriptObject hoverStyle = null;
+
+    private class StyleItem {
+        public final String property;
+        public final String oldValue;
+        public final String newValue;
+
+        public StyleItem(String property, String oldValue, String newValue) {
+            this.property = property;
+            this.oldValue = oldValue;
+            this.newValue = newValue;
+        }
+    }
+
+    private List<StyleItem> hoverStyleApplied = null;
+
+    static {
+        currentThemeSearch.put("ui-group-theme-", null);
+        currentThemeSearch.put("ui-body-", "ui-body-inherit");
+        currentThemeSearch.put("ui-bar-", "ui-bar-inherit");
+        currentThemeSearch.put("ui-page-theme-", null);
+    }
+
+    private static String getCurrentTheme(Element elt) {
+        if (elt == null) return null;
+        for (Entry<String, String> i : currentThemeSearch.entrySet()) {
+            String v = i.getValue();
+            String s = v == null ? JQMCommon.getStyleStartsWith(elt, i.getKey())
+                                 : JQMCommon.getStyleStartsWith(elt, i.getKey(), v);
+            if (s != null && !s.isEmpty()) {
+                return s.substring(i.getKey().length());
+            }
+        }
+        return null;
+    }
+
+    private String getCurrentTheme() {
+        String s = getTheme();
+        if (s != null && !s.isEmpty()) return s;
+        Element elt = getElement().getParentElement();
+        while (elt != null) {
+            s = getCurrentTheme(elt);
+            if (s != null) return s;
+            elt = elt.getParentElement();
+        }
+        return "a"; // just meaningful default value
+    }
 
     /**
      * Create a {@link JQMButton} with the given text that does not link to
@@ -118,10 +197,22 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
             withTransition(t);
     }
 
+    public static void initEltAsButton(Element elt) {
+        //JQMCommon.setDataRole("button"); - performance and buttonMarkup() is deprecated as of 1.4 and will be removed in 1.5
+
+        JQMCommon.setDataRole(elt, null);
+        elt.addClassName("ui-btn");
+        String tag = elt.getTagName();
+        if (tag == null || !tag.equals("BUTTON")) JQMCommon.setRole(elt, "button");
+        // TODO - defaults should be set based on $.fn.buttonMarkup.defaults
+        JQMCommon.setShadowEx(elt, true);
+        JQMCommon.setCornersEx(elt, true);
+    }
+
     protected JQMButton(Widget widget) {
         initWidget(widget);
         setStyleName("jqm4gwt-button");
-        setDataRole("button");
+        initEltAsButton(getElement());
         setId();
     }
 
@@ -140,16 +231,29 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
 			}
         }, this, handler, JQMComponentEvents.TAP_EVENT, TapEvent.getType());
 	}
-	
+
 	@Override
     public IconPos getIconPos() {
-        String string = getAttribute("data-iconpos");
-        return string == null ? null : IconPos.valueOf(string);
+        return JQMCommon.getIconPosEx(this, JQMCommon.STYLE_UI_BTN_ICONPOS);
     }
 
+	/**
+     * Sets the position of the icon. If you desire an icon only button then
+     * set the position to IconPos.NOTEXT
+     */
     @Override
-    public String getRel() {
-        return getElement().getAttribute("rel");
+    public void setIconPos(IconPos pos) {
+        JQMCommon.setIconPosEx(this, pos, JQMCommon.STYLE_UI_BTN_ICONPOS);
+    }
+
+    /**
+     * Sets the position of the icon. If you desire an icon only button then
+     * set the position to IconPos.NOTEXT
+     */
+    @Override
+    public JQMButton withIconPos(IconPos pos) {
+        setIconPos(pos);
+        return this;
     }
 
     @Override
@@ -161,45 +265,83 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
         return e.getInnerText();
     }
 
-    @Override
-    public Transition getTransition() {
-        String attr = getElement().getAttribute("data-transition");
-        if (attr == null)
-            return null;
-        return Transition.valueOf(attr);
-    }
-
-    @Override
-    public boolean isCorners() {
-        return "true".equals(getAttribute("data-corners"));
-    }
-
     /**
-     * Returns true if this button is set to load the linked page as a dialog
-     * page
+     * Returns true if this button is set to load the linked page as a dialog page
      *
      * @return true if this link will show as a dialog
      */
     public boolean isDialog() {
-        return "true".equals(getAttribute("data-rel"));
+        return Mobile.DATA_ROLE_DIALOG.equals(getRel());
+    }
+
+    /**
+     * Sets this button to be a dialog button. This changes the look and feel
+     * of the page that is loaded as a consequence of clicking on this button.
+     */
+    public void setDialog(boolean dialog) {
+        setRel(dialog ? Mobile.DATA_ROLE_DIALOG : null);
+    }
+
+    public JQMButton withDialog(boolean dialog) {
+        setDialog(dialog);
+        return this;
+    }
+
+    /**
+     * Returns true if this button is set to load a popup
+     */
+    public boolean isPopup() {
+        return "popup".equals(getRel());
+    }
+
+    /**
+     * @param popup - true if this button is set to load a popup
+     */
+    public void setPopup(boolean popup) {
+        setRel(popup ? "popup" : null);
+    }
+
+    public JQMButton withPopup(boolean popup) {
+        setPopup(popup);
+        return this;
+    }
+
+    public String getPopupPos() {
+        return JQMCommon.getPopupPos(this);
+    }
+
+    /**
+     * @param pos - possible values: window, origin, jQuery selector to get positioning element.
+     */
+    public void setPopupPos(String pos) {
+        JQMCommon.setPopupPos(this, pos);
     }
 
     @Override
     public boolean isIconShadow() {
-        return "true".equals(getAttribute("data-iconshadow"));
+        return JQMCommon.isIconShadow(this);
     }
 
-    /**
-     * @return true if this button is set to inline
-     */
+    /** Applies the drop shadow icon style to the select button if set to true. */
     @Override
-    public boolean isInline() {
-        return "true".equals(getAttribute("data-inline"));
+    public void setIconShadow(boolean shadow) {
+        JQMCommon.setIconShadow(this, shadow);
     }
 
+    /** Applies the drop shadow icon style to the select button if set to true. */
     @Override
-    public boolean isMini() {
-        return "true".equals(getAttribute("data-mini"));
+    public JQMButton withIconShadow(boolean shadow) {
+        setIconShadow(shadow);
+        return this;
+    }
+
+    public boolean isShadow() {
+        return JQMCommon.isShadowEx(this);
+    }
+
+    /** Button will have shadow if true */
+    public void setShadow(boolean shadow) {
+        JQMCommon.setShadowEx(this, shadow);
     }
 
     public String getHref() {
@@ -215,27 +357,27 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
         return this;
     }
 
-    @Override
-    public JQMButton removeIcon() {
-        getElement().removeAttribute("data-icon");
+    /**
+     * Sets this button to be a back button. This will override any URL set on
+     * the button.
+     */
+    public void setBack(boolean back) {
+        setRel(back ? "back" : null);
+    }
+
+    public JQMButton withBack(boolean back) {
+        setBack(back);
         return this;
     }
 
-    /**
-     * Sets this buttom to be a back button. This will override any URL set on
-     * the button.
-     */
-    public JQMButton setBack(boolean back) {
-        if (back)
-            getElement().setAttribute("data-rel", "back");
-        else
-            getElement().removeAttribute("data-rel");
-        return this;
+    @Override
+    public boolean isCorners() {
+        return JQMCommon.isCornersEx(this);
     }
 
     @Override
     public void setCorners(boolean corners) {
-        setAttribute("data-corners", String.valueOf(corners));
+        JQMCommon.setCornersEx(this, corners);
     }
 
     @Override
@@ -245,23 +387,19 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
     }
 
     /**
-     * Sets this buttom to be a dialog button. This changes the look and feel
-     * of the page that is loaded as a consequence of clicking on this button.
+     * Short cut for withRel("external");
      */
-    public JQMButton setDialog(boolean dialog) {
-        if (dialog)
-            setAttribute("data-rel", "dialog");
-        else
-            removeAttribute("data-rel");
+    public void setExternal(boolean external) {
+        setRel(external ? "external" : null);
+    }
+
+    public JQMButton withExternal(boolean external) {
+        setExternal(external);
         return this;
     }
 
-    /**
-     * Short cut for withRel("external");
-     */
-    public JQMButton setExternal() {
-        withRel("external");
-        return this;
+    public DataIcon getBuiltInIcon() {
+        return JQMCommon.getIconEx(this);
     }
 
     /**
@@ -269,18 +407,33 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
      */
     @Override
     public void setBuiltInIcon(DataIcon icon) {
-        if (icon == null)
-            removeIcon();
-        else
-            setIconURL(icon.getJqmValue());
+        JQMCommon.setIconEx(this, icon);
+        JQMCommon.invalidateIconPosEx(getElement(), JQMCommon.STYLE_UI_BTN_ICONPOS);
+    }
+
+    @Override
+    public JQMButton removeIcon() {
+        JQMCommon.setIconEx(this, null);
+        return this;
     }
 
     @Override
     public void setIconURL(String src) {
-        if (src == null)
-            removeIcon();
-        else
-            getElement().setAttribute("data-icon", src);
+        Element elt = getElement();
+        JQMCommon.setIconEx(elt, src);
+        JQMCommon.invalidateIconPosEx(elt, JQMCommon.STYLE_UI_BTN_ICONPOS);
+    }
+
+    public String getIconURL() {
+        return JQMCommon.getIconExStr(getElement());
+    }
+
+    public void setCustomIcon(String icon) {
+        setIconURL(icon);
+    }
+
+    public String getCustomIcon() {
+        return getIconURL();
     }
 
     /**
@@ -299,44 +452,12 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
     }
 
     /**
-     * Sets the position of the icon. If you desire an icon only button then
-     * set the position to IconPos.NOTEXT
+     * @return true if this button is set to inline
      */
     @Override
-    public void setIconPos(IconPos pos) {
-        if (pos == null)
-            getElement().removeAttribute("data-iconpos");
-        else
-            getElement().setAttribute("data-iconpos", pos.getJqmValue());
+    public boolean isInline() {
+        return JQMCommon.isInlineEx(this, JQMCommon.STYLE_UI_BTN_INLINE);
     }
-
-    /**
-     * Sets the position of the icon. If you desire an icon only button then
-     * set the position to IconPos.NOTEXT
-     */
-    @Override
-    public JQMButton withIconPos(IconPos pos) {
-        setIconPos(pos);
-        return this;
-    }
-
-    /**
-     * Applies the drop shadow style to the select button if set to true.
-     */
-    @Override
-    public void setIconShadow(boolean shadow) {
-        setAttribute("data-iconshadow", String.valueOf(shadow));
-    }
-
-    /**
-     * Applies the drop shadow style to the select button if set to true.
-     */
-    @Override
-    public JQMButton withIconShadow(boolean shadow) {
-        setIconShadow(shadow);
-        return this;
-    }
-
 
     /**
      * Sets this button to be inline.
@@ -349,10 +470,7 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
      */
     @Override
     public void setInline(boolean inline) {
-        if (inline)
-            setAttribute("data-inline", "true");
-        else
-            removeAttribute("data-inline");
+        JQMCommon.setInlineEx(this, inline, JQMCommon.STYLE_UI_BTN_INLINE);
     }
 
     /**
@@ -370,12 +488,17 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
         return this;
     }
 
+    @Override
+    public boolean isMini() {
+        return JQMCommon.isMiniEx(this);
+    }
+
     /**
      * If set to true then renders a smaller version of the standard-sized element.
      */
     @Override
     public void setMini(boolean mini) {
-        setAttribute("data-mini", String.valueOf(mini));
+        JQMCommon.setMiniEx(this, mini);
     }
 
     /**
@@ -388,11 +511,13 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
     }
 
     @Override
+    public String getRel() {
+        return JQMCommon.getAttribute(getElement(), "data-rel");
+    }
+
+    @Override
     public void setRel(String rel) {
-        if (rel == null)
-            getElement().removeAttribute("data-rel");
-        else
-            getElement().setAttribute("data-rel", rel);
+        JQMCommon.setAttribute(getElement(), "data-rel", rel);
     }
 
     @Override
@@ -404,13 +529,27 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
     @Override
     public void setText(String text) {
         // if the button has already been rendered then we need to go down
-        // deep until we get the
-        // final span
+        // deep until we get the final span.
+        // it's not a case in 1.4.x anymore, because buttons have clean/simple mark-up now,
+        // but could be useful for complex buttons (see setHtml() method).
         Element e = getElement();
         while (e.getFirstChildElement() != null) {
             e = e.getFirstChildElement();
         }
         e.setInnerText(text);
+    }
+
+    /**
+     * Useful for complex buttons, for example buttons with vertically centered text.
+     **/
+    public void setHtml(String html) {
+        Element e = getElement();
+        e.setInnerHTML(html);
+    }
+
+    public String getHtml() {
+        Element e = getElement();
+        return e.getInnerHTML();
     }
 
     @Override
@@ -419,15 +558,17 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
         return this;
     }
 
+    @Override
+    public Transition getTransition() {
+        return JQMCommon.getTransition(getElement());
+    }
+
     /**
      * Sets the transition to be used by this button when loading the URL.
      */
     @Override
     public void setTransition(Transition transition) {
-        if (transition != null)
-            setAttribute("data-transition", transition.getJQMValue());
-        else
-            removeAttribute("data-transition");
+        JQMCommon.setTransition(getElement(), transition);
     }
 
     /**
@@ -439,12 +580,210 @@ public class JQMButton extends JQMWidget implements HasText<JQMButton>, HasRel<J
         return this;
     }
 
-    public JQMButton setTransitionReverse(boolean reverse) {
-        if (reverse)
-            setAttribute("data-direction", "reverse");
-        else
-            removeAttribute("data-direction");
+    public void setTransitionReverse(boolean reverse) {
+        if (reverse) setAttribute("data-direction", "reverse");
+        else removeAttribute("data-direction");
+    }
+
+    public JQMButton withTransitionReverse(boolean reverse) {
+        setTransitionReverse(reverse);
         return this;
+    }
+
+    public boolean isIconNoDisc() {
+        return JQMCommon.isIconNoDisc(this);
+    }
+
+    public void setIconNoDisc(boolean value) {
+        JQMCommon.setIconNoDisc(this, value);
+    }
+
+    public boolean isIconAlt() {
+        return JQMCommon.isIconAlt(this);
+    }
+
+    /**
+     * @param value - if true "white vs. black" icon style will be used
+     */
+    public void setIconAlt(boolean value) {
+        JQMCommon.setIconAlt(this, value);
+    }
+
+    public boolean isAlwaysActive() {
+        return alwaysActive;
+    }
+
+    /**
+     * @param value - if true button always be highlighted as active.
+     */
+    public void setAlwaysActive(boolean value) {
+        if (alwaysActive == value) return;
+        alwaysActive = value;
+        JQMCommon.setBtnActive(this, alwaysActive);
+        if (alwaysActive) Scheduler.get().scheduleFinally(createAlwaysActiveCmd());
+    }
+
+    private Scheduler.RepeatingCommand createAlwaysActiveCmd() {
+        return new Scheduler.RepeatingCommand() {
+            @Override
+            public boolean execute() {
+                if (alwaysActive) JQMCommon.setBtnActive(JQMButton.this, true);
+                return alwaysActive; // stops when alwaysActive == false
+            }};
+    }
+
+    public boolean isAlwaysHover() {
+        return alwaysHover;
+    }
+
+    /**
+     * @param value - if true button always be highlighted as hover.
+     */
+    public void setAlwaysHover(boolean value) {
+        if (alwaysHover == value) return;
+        alwaysHover = value;
+        checkAlwaysHover();
+    }
+
+    @Override
+    protected void onLoad() {
+        super.onLoad();
+        if (alwaysHover) {
+            Widget p = getParent();
+            while (p != null) {
+                if (p instanceof JQMPage) {
+                    ((JQMPage) p).addPageHandler(new JQMPageEvent.DefaultHandler() {
+                        @Override
+                        public void onShow(JQMPageEvent event) {
+                            super.onShow(event);
+                            checkAlwaysHover();
+                        }
+                    });
+                    break;
+                }
+                p = p.getParent();
+            }
+            if (!(p instanceof JQMPage)) checkAlwaysHover();
+        }
+    }
+
+    private void checkAlwaysHover() {
+        if (isAttached()) {
+            if (alwaysHover) {
+                prepareHoverStyle();
+                applyHoverStyle();
+            } else {
+                removeHoverStyle();
+            }
+        }
+    }
+
+    private void applyHoverStyle() {
+        if (hoverStyle == null) return;
+        Style st = getElement().getStyle();
+        if (hoverStyleApplied == null) {
+            hoverStyleApplied = new ArrayList<StyleItem>();
+            JsArrayString keys = JQMContext.getJsObjKeys(hoverStyle);
+            if (keys == null) return;
+            for (int i = 0; i < keys.length(); i++) {
+                String val = JQMContext.getJsObjValue(hoverStyle, keys.get(i));
+                if (val == null) continue;
+                String prop = keys.get(i);
+                for (int j = 0; j < HOVER_REPLACE.length - 1; j = j + 2) {
+                    prop = prop.replaceAll(HOVER_REPLACE[j], HOVER_REPLACE[j + 1]);
+                }
+                prop = JQMCommon.hyphenToCamelCase(prop);
+                String oldVal = st.getProperty(prop);
+                String newVal = val.toString();
+                if (newVal.equals(oldVal)) continue;
+                hoverStyleApplied.add(new StyleItem(prop, oldVal, newVal));
+            }
+        }
+        for (StyleItem item : hoverStyleApplied) {
+            st.setProperty(item.property, item.newValue);
+        }
+    }
+
+    private void removeHoverStyle() {
+        if (hoverStyleApplied != null) {
+            Style st = getElement().getStyle();
+            for (StyleItem item : hoverStyleApplied) {
+                st.setProperty(item.property, item.oldValue);
+            }
+        }
+        hoverStyleApplied = null;
+        hoverStyle = null;
+    }
+
+    private void prepareHoverStyle() {
+        if (hoverStyle != null) return;
+
+        String theme = getCurrentTheme();
+        String rule = ".ui-btn.ui-btn-" + theme + ":hover";
+        hoverStyle = cachedCssRules.get(rule);
+        if (hoverStyle != null) return;
+
+        String ruleIE = ".ui-btn-" + theme + ".ui-btn:hover"; // IE9 changes/rearranges css rules!
+        hoverStyle = cachedCssRules.get(ruleIE);
+        if (hoverStyle != null) return;
+
+        JsArrayString jsStrs = JQMContext.getJsArrayString(HOVER_PROPS);
+        JsArrayString jsRegex = JQMContext.getJsArrayString(HOVER_REGEX);
+        hoverStyle = JQMContext.getCssForRule(rule, jsStrs, jsRegex);
+        if (hoverStyle != null) {
+            cachedCssRules.put(rule, hoverStyle);
+        } else {
+            hoverStyle = JQMContext.getCssForRule(ruleIE, jsStrs, jsRegex);
+            if (hoverStyle != null) cachedCssRules.put(ruleIE, hoverStyle);
+        }
+    }
+
+    @Override
+    public String getTheme() {
+        return JQMCommon.getThemeEx(this, JQMCommon.STYLE_UI_BTN,
+                /*excludes:*/ JQMCommon.STYLE_UI_BTN_INLINE, JQMCommon.STYLE_UI_BTN_ICONPOS,
+                JQMCommon.STYLE_UI_BTN_ACTIVE);
+    }
+
+    @Override
+    public void setTheme(String themeName) {
+        setTheme(this.getElement(), themeName);
+    }
+
+    public static void setTheme(Element elt, String themeName) {
+        JQMCommon.setThemeEx(elt, themeName, JQMCommon.STYLE_UI_BTN,
+                /*excludes:*/ JQMCommon.STYLE_UI_BTN_INLINE, JQMCommon.STYLE_UI_BTN_ICONPOS,
+                JQMCommon.STYLE_UI_BTN_ACTIVE);
+    }
+
+    private static final String STYLE_UI_BTN_RIGHT = "ui-btn-right";
+    private static final String STYLE_UI_BTN_LEFT = "ui-btn-left";
+
+    public static enum PosOnBand { RIGHT, LEFT }
+
+    public PosOnBand getPosOnBand() {
+        if (JQMCommon.hasStyle(this, STYLE_UI_BTN_RIGHT)) return PosOnBand.RIGHT;
+        else if (JQMCommon.hasStyle(this, STYLE_UI_BTN_LEFT)) return PosOnBand.LEFT;
+        else return null;
+    }
+
+    /**
+     * Works in case of this button placed on Header, Popup, ...
+     */
+    public void setPosOnBand(PosOnBand value) {
+        if (value == null) {
+            getElement().removeClassName(STYLE_UI_BTN_RIGHT);
+            getElement().removeClassName(STYLE_UI_BTN_LEFT);
+        } else {
+            switch (value) {
+            case LEFT:
+                getElement().addClassName(STYLE_UI_BTN_LEFT);
+                break;
+            case RIGHT:
+                getElement().addClassName(STYLE_UI_BTN_RIGHT);
+                break;
+            }
+        }
     }
 
 }

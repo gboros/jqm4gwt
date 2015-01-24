@@ -40,8 +40,8 @@ import com.sksamuel.jqm4gwt.html.Legend;
  *         The child checkboxes are grouped together and can be set to be
  *         vertical or horizontal.
  *
- * <p><a href="http://view.jquerymobile.com/1.3.2/dist/demos/widgets/checkbox/">Checkboxes</a></p>
- * <p><a href="http://view.jquerymobile.com/1.3.2/dist/demos/#Checkboxes">Form elements - Checkboxes</a></p>
+ * <p><a href="http://demos.jquerymobile.com/1.4.5/checkboxradio-checkbox/">Checkboxes</a></p>
+ * <p><a href="http://demos.jquerymobile.com/1.4.5/forms/#checkboxes">Form elements - Checkboxes</a></p>
  *
  * <h3>Use in UiBinder Templates</h3>
  *
@@ -222,10 +222,6 @@ public class JQMCheckset extends JQMFieldContainer implements HasText<JQMCheckse
 		}
 		return null;
 	}
-
-	private native void getValueC(String id) /*-{
-        alert($wnd.$('#' + id).is(':checked'));
-    }-*/;
 
 	/**
 	 * Returns true if at least one checkbox in this checkset is selected.

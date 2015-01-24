@@ -14,9 +14,14 @@ import com.google.gwt.event.shared.GwtEvent.Type;
 import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.user.client.ui.HasValue;
 import com.google.gwt.user.client.ui.ListBox;
+import com.google.gwt.user.client.ui.Widget;
+import com.sksamuel.jqm4gwt.HasCorners;
 import com.sksamuel.jqm4gwt.HasMini;
 import com.sksamuel.jqm4gwt.HasText;
 import com.sksamuel.jqm4gwt.JQMCommon;
+import com.sksamuel.jqm4gwt.JQMPage;
+import com.sksamuel.jqm4gwt.JQMPageEvent;
+import com.sksamuel.jqm4gwt.button.JQMButton;
 import com.sksamuel.jqm4gwt.events.HasTapHandlers;
 import com.sksamuel.jqm4gwt.events.JQMComponentEvents;
 import com.sksamuel.jqm4gwt.events.JQMHandlerRegistration;
@@ -29,14 +34,11 @@ import com.sksamuel.jqm4gwt.html.FormLabel;
 /**
  * @author Stephen K Samuel samspade79@gmail.com 18 May 2011 04:21:09
  *
- *         <p>Implementation of a JQuery Model Flip element. This is like a two
- *         element {@link JQMRadioset} that is rendered like a "toggle" on an iPhone.</p>
- *
- * <p><a href="http://view.jquerymobile.com/1.3.2/dist/demos/widgets/sliders/switch.html">Flip switch</a></p>
+ * <p><a href="http://demos.jquerymobile.com/1.4.5/flipswitch/">Flip switch</a></p>
  *
  */
 public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasValue<String>,
-        HasChangeHandlers, HasClickHandlers, HasTapHandlers, HasMini<JQMFlip> {
+        HasChangeHandlers, HasClickHandlers, HasTapHandlers, HasMini<JQMFlip>, HasCorners<JQMFlip> {
 
     private final FormLabel label = new FormLabel();
 
@@ -51,6 +53,11 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
     // There are three internal states: null, value1, value2 AND only two ui states: value1, value2.
     // Three internal states are needed to properly support data binding libraries (Errai for example).
     private String internVal;
+
+    /** setValue() in progress */
+    private boolean inSetValue;
+
+    private String trackTheme;
 
     /**
      * Creates a new {@link JQMFlip} widget with the given label text and
@@ -104,10 +111,11 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
         label.setFor(id);
         select.setName(id);
         select.getElement().setId(id);
-        select.getElement().setAttribute("data-role", "slider");
+        JQMCommon.setDataRole(select.getElement(), "flipswitch");
         addChangeHandler(new ChangeHandler() {
             @Override
             public void onChange(ChangeEvent event) {
+                if (inSetValue) return;
                 switch (getSelectedIndex()) {
                 case 0:
                     internVal = getValue1();
@@ -156,17 +164,17 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
         return flow.addDomHandler(handler, ClickEvent.getType());
     }
 
-	@Override
-	public HandlerRegistration addTapHandler(TapHandler handler) {
+    @Override
+    public HandlerRegistration addTapHandler(TapHandler handler) {
         // this is not a native browser event so we will have to manage it via JS
         return JQMHandlerRegistration.registerJQueryHandler(new WidgetHandlerCounter() {
-			@Override
-			public int getHandlerCountForWidget(Type<?> type) {
-				return getHandlerCount(type);
-			}
+            @Override
+            public int getHandlerCountForWidget(Type<?> type) {
+                return getHandlerCount(type);
+            }
         }, this, handler, JQMComponentEvents.TAP_EVENT, TapEvent.getType());
-	}
-	
+    }
+
     @Override
     public HandlerRegistration addValueChangeHandler(ValueChangeHandler<String> handler) {
         // Initialization code
@@ -214,11 +222,21 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
     }
 
     protected void refresh() {
-        refresh(select.getElement().getId());
+        refresh(select.getElement());
     }
 
-    private native void refresh(String id) /*-{
-		$wnd.$("#" + id).slider("refresh");
+    private static native void refresh(Element elt) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
+        var w = $wnd.$(elt);
+        if (w.data('mobile-flipswitch') !== undefined) {
+            w.flipswitch('refresh');
+        }
+    }-*/;
+
+    private static native boolean isReady(Element elt) /*-{
+        if ($wnd.$ === undefined || $wnd.$ === null) return; // jQuery is not loaded
+        var w = $wnd.$(elt);
+        return w.data('mobile-flipswitch') !== undefined;
     }-*/;
 
     /**
@@ -244,8 +262,7 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
     }
 
     public void setTextHidden(boolean value) {
-        if (value) addStyleName("ui-hide-label");
-        else removeStyleName("ui-hide-label");
+        JQMCommon.setLabelHidden(this, value);
     }
 
     /**
@@ -266,7 +283,15 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
         int oldIdx = getSelectedIndex();
         String oldVal = fireEvents ? getValue() : null;
         internVal = value;
-        if (oldIdx != newIdx) setSelectedIndex(newIdx);
+        if (oldIdx != newIdx) {
+            inSetValue = true;
+            try {
+                setSelectedIndex(newIdx);
+            } finally {
+                inSetValue = false;
+            }
+        }
+
         if (fireEvents) {
             boolean eq = internVal == oldVal || internVal != null && internVal.equals(oldVal);
             if (!eq) ValueChangeEvent.fire(this, internVal);
@@ -297,8 +322,7 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
 
     @Override
     public boolean isMini() {
-        Element e = select.getElement();
-        return "true".equals(e.getAttribute("data-mini"));
+        return JQMCommon.isMini(select);
     }
 
     /**
@@ -306,8 +330,7 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
      */
     @Override
     public void setMini(boolean mini) {
-        Element e = select.getElement();
-        e.setAttribute("data-mini", String.valueOf(mini));
+        JQMCommon.setMini(select, mini);
     }
 
     /**
@@ -321,13 +344,86 @@ public class JQMFlip extends JQMFieldContainer implements HasText<JQMFlip>, HasV
 
     @Override
     public String getTheme() {
-        return select.getElement().getAttribute("data-theme");
+        return JQMCommon.getTheme(select);
     }
 
     @Override
     public void setTheme(String themeName) {
         JQMCommon.applyTheme(select, themeName);
-        JQMCommon.setAttribute(select, "data-track-theme", themeName);
+    }
+
+    public String getDataWrapper() {
+        return JQMCommon.getDataWrapper(select);
+    }
+
+    public void setDataWrapper(String wrapper) {
+        JQMCommon.setDataWrapper(select, wrapper);
+    }
+
+    @Override
+    public boolean isCorners() {
+        return JQMCommon.isCorners(select);
+    }
+
+    @Override
+    public void setCorners(boolean corners) {
+        JQMCommon.setCorners(select, corners);
+    }
+
+    @Override
+    public JQMFlip withCorners(boolean corners) {
+        setCorners(corners);
+        return this;
+    }
+
+    public String getTrackTheme() {
+        return trackTheme;
+    }
+
+    /** Sets the theme for the track button */
+    public void setTrackTheme(String value) {
+        // data-track-theme is not available for flipswitch, so we have to hack it
+        trackTheme = value != null ? value.trim() : value;
+        refreshTrackTheme();
+    }
+
+    private void refreshTrackTheme() {
+        Element elt = select.getElement();
+        if (!select.isAttached() || !isReady(elt)) return;
+        Element par = elt.getParentElement();
+        if (par == null) return;
+        Element track = JQMCommon.findChild(par, "ui-flipswitch-on");
+        if (track != null && JQMCommon.hasStyle(track, "ui-btn")) {
+            if (trackTheme != null && !trackTheme.isEmpty()) {
+                track.removeClassName("ui-btn-inherit");
+                JQMButton.setTheme(track, trackTheme);
+            } else {
+                JQMButton.setTheme(track, "inherit");
+                track.removeAttribute("data-theme");
+            }
+        }
+    }
+
+    @Override
+    protected void onLoad() {
+        super.onLoad();
+        if (trackTheme != null && !trackTheme.isEmpty()) {
+            Widget p = getParent();
+            while (p != null) {
+                if (p instanceof JQMPage) {
+                    ((JQMPage) p).addPageHandler(new JQMPageEvent.DefaultHandler() {
+                        @Override
+                        public void onShow(JQMPageEvent event) {
+                            super.onShow(event);
+                            refreshTrackTheme();
+                        }
+                    });
+                    break;
+                }
+                p = p.getParent();
+            }
+            if (!(p instanceof JQMPage)) refreshTrackTheme();
+        }
     }
 
 }

@@ -3,8 +3,16 @@ package com.sksamuel.jqm4gwt;
 import java.util.Collection;
 
 import com.google.gwt.dom.client.Document;
+import com.google.gwt.dom.client.Element;
+import com.google.gwt.event.shared.EventHandler;
+import com.google.gwt.event.shared.GwtEvent.Type;
+import com.google.gwt.event.shared.HandlerRegistration;
 import com.google.gwt.user.client.ui.ComplexPanel;
 import com.google.gwt.user.client.ui.Widget;
+import com.sksamuel.jqm4gwt.events.HasJQMEventHandlers;
+import com.sksamuel.jqm4gwt.events.JQMEventFactory;
+import com.sksamuel.jqm4gwt.events.JQMHandlerRegistration;
+import com.sksamuel.jqm4gwt.events.JQMHandlerRegistration.WidgetHandlerCounter;
 
 /**
  * @author Stephen K Samuel samspade79@gmail.com 16 Sep 2012 00:22:18
@@ -13,13 +21,12 @@ import com.google.gwt.user.client.ui.Widget;
  * which are directly attached to the DOM.
  * It is meant to contain the common functionality for showing these containers.
  */
-public abstract class JQMContainer extends ComplexPanel implements HasId<JQMContainer>, HasTheme<JQMContainer>, HasTransition<JQMContainer> {
+public abstract class JQMContainer extends ComplexPanel implements HasId<JQMContainer>,
+        HasTheme<JQMContainer>, HasTransition<JQMContainer>, HasCorners<JQMContainer>,
+        HasJQMEventHandlers {
 
-    public static native void triggerCreate() /*-{
-        $wnd.$('body').trigger('create');
-    }-*/;
-
-    static int counter = 1;
+    private static int counter = 1;
+    private static final String AUTOINC_SUFFIX = "++";
 
     /**
      * Set to true once the container has been enhanced by jQuery Mobile.
@@ -39,8 +46,14 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
     }
 
     protected void setRole(String role) {
+        String s = JQMCommon.getDataRole(this);
+        if (s != null && !s.isEmpty()) removeStyleName("jqm4gwt-" + s);
         JQMCommon.setDataRole(this, role);
-        setStyleName("jqm4gwt-" + role);
+        addStyleName("jqm4gwt-" + role);
+    }
+
+    private static String generateContainerId() {
+        return "container" + (counter++);
     }
 
     /**
@@ -48,7 +61,7 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
      * @return the instance being operated on as part of a Fluent API
      */
     public JQMContainer withContainerId() {
-        setContainerId("container" + (counter++));
+        setContainerId(generateContainerId());
         return this;
     }
 
@@ -61,8 +74,21 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
             throw new IllegalArgumentException("id for JQMContainer cannot be null");
         if (containerId.contains(" "))
             throw new IllegalArgumentException("id for JQMContainer cannot contain space");
-        this.id = containerId;
-        setAttribute("data-url", containerId);
+
+        if (containerId.isEmpty()) {
+            this.id = generateContainerId();
+        } else if (containerId.endsWith(AUTOINC_SUFFIX)) {
+            this.id = containerId.substring(0, containerId.length() - AUTOINC_SUFFIX.length()) + (counter++);
+        } else {
+            this.id = containerId;
+        }
+
+        getElement().setId(this.id);
+        setAttribute("data-url", this.id);
+    }
+
+    public String getContainerId() {
+        return this.id;
     }
 
     /**
@@ -84,7 +110,8 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
 
     @Override
     public void add(Widget w) {
-        add(w, getElement());
+        Element elt = getElement();
+        add(w, elt);
     }
 
     /**
@@ -121,12 +148,6 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
     @Override
     public String getTheme() {
         return JQMCommon.getTheme(this);
-    }
-
-    @Override
-    public Transition getTransition() {
-        String value = getElement().getAttribute("data-transition");
-        return value == null ? null : Transition.valueOf(value);
     }
 
     public boolean isEnhanced() {
@@ -176,8 +197,13 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
     }
 
     @Override
+    public Transition getTransition() {
+        return JQMCommon.getTransition(getElement());
+    }
+
+    @Override
     public void setTransition(Transition transition) {
-        getElement().setAttribute("data-transition", transition.getJQMValue());
+        JQMCommon.setTransition(getElement(), transition);
     }
 
     @Override
@@ -190,4 +216,34 @@ public abstract class JQMContainer extends ComplexPanel implements HasId<JQMCont
     public boolean isVisible() {
         return super.isVisible() && JQMCommon.isVisible(this);
     }
+
+    @Override
+    public boolean isCorners() {
+        return JQMCommon.isCorners(this);
+    }
+
+    @Override
+    public void setCorners(boolean corners) {
+        JQMCommon.setCorners(this, corners);
+    }
+
+    @Override
+    public JQMContainer withCorners(boolean corners) {
+        setCorners(corners);
+        return this;
+    }
+
+    @Override
+    public HandlerRegistration addJQMEventHandler(String jqmEventName, EventHandler handler) {
+
+        Type<EventHandler> t = JQMEventFactory.getType(jqmEventName, EventHandler.class);
+
+        return JQMHandlerRegistration.registerJQueryHandler(new WidgetHandlerCounter() {
+            @Override
+            public int getHandlerCountForWidget(Type<?> type) {
+                return getHandlerCount(type);
+            }
+        }, this, handler, jqmEventName, t);
+    }
+
 }
